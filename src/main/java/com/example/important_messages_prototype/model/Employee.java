@@ -27,6 +27,10 @@ public class Employee extends BaseDocument {
 	@NotBlank
 	private String department;
 
+	/** The store the employee works at. Kept as text so values like "0042" keep their leading zeros. */
+	@NotBlank
+	private String storeNumber;
+
 	private String jobTitle;
 
 	@NotNull
@@ -39,12 +43,13 @@ public class Employee extends BaseDocument {
 	}
 
 	public Employee(String employeeNumber, String firstName, String lastName, String email, String department,
-			String jobTitle, Role role) {
+			String storeNumber, String jobTitle, Role role) {
 		this.employeeNumber = employeeNumber;
 		this.firstName = firstName;
 		this.lastName = lastName;
 		this.email = email;
 		this.department = department;
+		this.storeNumber = storeNumber;
 		this.jobTitle = jobTitle;
 		setRole(role);
 	}
@@ -64,6 +69,7 @@ public class Employee extends BaseDocument {
 		this.lastName = other.lastName;
 		this.email = other.email;
 		this.department = other.department;
+		this.storeNumber = other.storeNumber;
 		this.jobTitle = other.jobTitle;
 		setRole(other.role);
 		this.agreedToElectronicSignature = other.agreedToElectronicSignature;
@@ -83,6 +89,9 @@ public class Employee extends BaseDocument {
 
 	public String getDepartment() { return department; }
 	public void setDepartment(String department) { this.department = department; }
+
+	public String getStoreNumber() { return storeNumber; }
+	public void setStoreNumber(String storeNumber) { this.storeNumber = storeNumber; }
 
 	public String getJobTitle() { return jobTitle; }
 	public void setJobTitle(String jobTitle) { this.jobTitle = jobTitle; }

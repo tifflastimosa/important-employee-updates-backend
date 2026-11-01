@@ -25,8 +25,9 @@ public class EmployeeController {
 	}
 
 	@GetMapping
-	public List<Employee> list(@RequestParam(required = false) String department) {
-		return employeeService.findAll(department);
+	public List<Employee> list(@RequestParam(required = false) String department,
+			@RequestParam(required = false) String storeNumber) {
+		return employeeService.findAll(department, storeNumber);
 	}
 
 	@GetMapping("/{id}")

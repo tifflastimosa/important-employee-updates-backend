@@ -6,7 +6,8 @@ import com.example.important_messages_prototype.model.Employee;
 
 public interface EmployeeService {
 
-	List<Employee> findAll(String department);
+	/** All employees, optionally narrowed by department and/or store number (null or blank means no filter). */
+	List<Employee> findAll(String department, String storeNumber);
 
 	Employee findById(String id);
 

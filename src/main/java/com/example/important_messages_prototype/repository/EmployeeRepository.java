@@ -21,4 +21,8 @@ public interface EmployeeRepository extends MongoRepository<Employee, String> {
 	List<Employee> findByDepartment(String department);
 
 	List<Employee> findByDepartmentIn(Collection<String> departments);
+
+	List<Employee> findByStoreNumber(String storeNumber);
+
+	List<Employee> findByDepartmentAndStoreNumber(String department, String storeNumber);
 }

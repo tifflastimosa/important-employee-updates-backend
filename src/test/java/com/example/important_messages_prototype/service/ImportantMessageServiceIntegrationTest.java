@@ -37,6 +37,8 @@ class ImportantMessageServiceIntegrationTest {
 	private final String tag = UUID.randomUUID().toString().substring(0, 8);
 	private final String engineering = "Engineering-" + tag;
 	private final String sales = "Sales-" + tag;
+	private final String store1 = "S1-" + tag;
+	private final String store2 = "S2-" + tag;
 	private final List<String> employeeIds = new ArrayList<>();
 	private final List<String> messageIds = new ArrayList<>();
 
@@ -47,8 +49,12 @@ class ImportantMessageServiceIntegrationTest {
 	}
 
 	private Employee newEmployee(String first, String department, Role role) {
+		return newEmployee(first, department, store1, role);
+	}
+
+	private Employee newEmployee(String first, String department, String storeNumber, Role role) {
 		Employee e = employeeService.create(new Employee(first.toUpperCase() + "-" + tag, first, "Test",
-				first.toLowerCase() + "-" + tag + "@example.com", department, "Tester", role));
+				first.toLowerCase() + "-" + tag + "@example.com", department, storeNumber, "Tester", role));
 		employeeIds.add(e.getId());
 		return e;
 	}
@@ -69,7 +75,7 @@ class ImportantMessageServiceIntegrationTest {
 		assertThat(employeeService.findById(alice.getId()).getFullName()).isEqualTo("Alice Test");
 
 		Employee duplicate = new Employee("OTHER-" + tag, "Other", "Person", alice.getEmail().toUpperCase(), sales,
-				null, Role.EMPLOYEE);
+				store1, null, Role.EMPLOYEE);
 		assertThatThrownBy(() -> employeeService.create(duplicate)).isInstanceOf(BusinessRuleException.class);
 	}
 
@@ -78,7 +84,7 @@ class ImportantMessageServiceIntegrationTest {
 		Employee alice = newEmployee("Alice", engineering, Role.EMPLOYEE);
 
 		Employee sameNumber = new Employee(alice.getEmployeeNumber(), "Other", "Person", "other-" + tag + "@example.com",
-				sales, null, Role.EMPLOYEE);
+				sales, store1, null, Role.EMPLOYEE);
 		assertThatThrownBy(() -> employeeService.create(sameNumber))
 				.isInstanceOf(BusinessRuleException.class)
 				.hasMessageContaining("Employee number");
@@ -94,6 +100,25 @@ class ImportantMessageServiceIntegrationTest {
 		employeeService.update(alice.getId(), changes);
 
 		assertThat(employeeService.findById(alice.getId()).isAgreedToElectronicSignature()).isTrue();
+	}
+
+	@Test
+	void storeNumberIsSavedUpdatedAndFilterable() {
+		Employee alice = newEmployee("Alice", engineering, store1, Role.EMPLOYEE);
+		Employee carol = newEmployee("Carol", sales, store1, Role.EMPLOYEE);
+		Employee dave = newEmployee("Dave", engineering, store2, Role.EMPLOYEE);
+
+		assertThat(employeeService.findById(alice.getId()).getStoreNumber()).isEqualTo(store1);
+
+		assertThat(employeeService.findAll(null, store1)).containsExactlyInAnyOrder(alice, carol);
+		assertThat(employeeService.findAll(engineering, store1)).containsExactly(alice);
+		assertThat(employeeService.findAll(engineering, null)).containsExactlyInAnyOrder(alice, dave);
+		assertThat(employeeService.findAll(engineering, " ")).containsExactlyInAnyOrder(alice, dave);
+
+		Employee changes = employeeService.findById(alice.getId());
+		changes.setStoreNumber(store2);
+		employeeService.update(alice.getId(), changes);
+		assertThat(employeeService.findAll(null, store2)).containsExactlyInAnyOrder(alice, dave);
 	}
 
 	@Test
@@ -214,6 +239,7 @@ class ImportantMessageServiceIntegrationTest {
 				.containsExactly("Bob Test", "Erin Test");
 		assertThat(status.notAcknowledged()).extracting(EmployeeSummary::employeeNumber)
 				.containsExactly(bob.getEmployeeNumber(), erin.getEmployeeNumber());
+		assertThat(status.notAcknowledged()).extracting(EmployeeSummary::storeNumber).containsOnly(store1);
 	}
 
 	@Test

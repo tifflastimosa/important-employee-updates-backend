@@ -17,10 +17,19 @@ public class EmployeeServiceImpl implements EmployeeService {
 	}
 
 	@Override
-	public List<Employee> findAll(String department) {
-		return department == null || department.isBlank()
-				? employeeRepository.findAll()
-				: employeeRepository.findByDepartment(department);
+	public List<Employee> findAll(String department, String storeNumber) {
+		boolean byDepartment = department != null && !department.isBlank();
+		boolean byStore = storeNumber != null && !storeNumber.isBlank();
+		if (byDepartment && byStore) {
+			return employeeRepository.findByDepartmentAndStoreNumber(department, storeNumber);
+		}
+		if (byDepartment) {
+			return employeeRepository.findByDepartment(department);
+		}
+		if (byStore) {
+			return employeeRepository.findByStoreNumber(storeNumber);
+		}
+		return employeeRepository.findAll();
 	}
 
 	@Override
