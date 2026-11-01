@@ -3,6 +3,8 @@ package com.example.important_messages_prototype.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -263,6 +265,109 @@ class ImportantMessageServiceIntegrationTest {
 		assertThat(messageService.findPendingForEmployee(manager.getId())).isEmpty();
 		assertThatThrownBy(() -> messageService.findPendingForEmployee("does-not-exist"))
 				.isInstanceOf(ResourceNotFoundException.class);
+	}
+
+	private ImportantMessage newMessageDue(String title, Employee author, Set<String> departments, Instant deadline) {
+		ImportantMessage m = messageService.create(new ImportantMessage(title, "Body of " + title, Priority.HIGH,
+				author, departments, deadline));
+		messageIds.add(m.getId());
+		return m;
+	}
+
+	@Test
+	void deadlineIsSavedAndCountdownIsReturned() {
+		Employee manager = newEmployee("Alice", engineering, Role.MANAGER);
+		newEmployee("Carol", engineering, Role.EMPLOYEE);
+		Instant deadline = Instant.now().plus(Duration.ofDays(3)).truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
+
+		ImportantMessage message = newMessageDue("Due " + tag, manager, Set.of(engineering), deadline);
+
+		ImportantMessage reloaded = messageService.findById(message.getId());
+		assertThat(reloaded.getDeadline()).isEqualTo(deadline);
+		assertThat(reloaded.getCountdown().overdue()).isFalse();
+		assertThat(reloaded.getCountdown().days()).isEqualTo(2); // a few ms less than 3 full days
+		assertThat(messageService.getCountdown(message.getId()).deadline()).isEqualTo(deadline);
+		assertThat(messageService.getAcknowledgementStatus(message.getId()).countdown()).isNotNull();
+
+		ImportantMessage noDeadline = newMessage("No deadline " + tag, manager, Set.of(engineering));
+		assertThat(messageService.findById(noDeadline.getId()).getCountdown()).isNull();
+		assertThatThrownBy(() -> messageService.getCountdown(noDeadline.getId()))
+				.isInstanceOf(ResourceNotFoundException.class);
+	}
+
+	@Test
+	void deadlineMustBeInTheFutureWhenSetOrChanged() {
+		Employee manager = newEmployee("Alice", engineering, Role.MANAGER);
+		Instant past = Instant.now().minus(Duration.ofHours(1));
+
+		assertThatThrownBy(() -> newMessageDue("Past " + tag, manager, Set.of(engineering), past))
+				.isInstanceOf(BusinessRuleException.class)
+				.hasMessageContaining("future");
+
+		ImportantMessage message = newMessageDue("Future " + tag, manager, Set.of(engineering),
+				Instant.now().plus(Duration.ofDays(1)));
+		ImportantMessage changes = messageService.findById(message.getId());
+		changes.setDeadline(past);
+		assertThatThrownBy(() -> messageService.update(message.getId(), changes))
+				.isInstanceOf(BusinessRuleException.class);
+	}
+
+	@Test
+	void editingAnOverdueMessageWithoutChangingItsDeadlineIsAllowed() {
+		Employee manager = newEmployee("Alice", engineering, Role.MANAGER);
+		newEmployee("Carol", engineering, Role.EMPLOYEE);
+		ImportantMessage message = newMessageDue("Overdue " + tag, manager, Set.of(engineering),
+				Instant.now().plus(Duration.ofDays(1)));
+		// Simulate time passing by moving the stored deadline into the past directly.
+		ImportantMessage stored = messageRepository.findById(message.getId()).orElseThrow();
+		stored.setDeadline(Instant.now().minus(Duration.ofHours(2)));
+		messageRepository.save(stored);
+
+		ImportantMessage changes = messageService.findById(message.getId());
+		changes.setContent("Clarified wording");
+		ImportantMessage updated = messageService.update(message.getId(), changes);
+
+		assertThat(updated.getContent()).isEqualTo("Clarified wording");
+		assertThat(updated.getCountdown().overdue()).isTrue();
+	}
+
+	@Test
+	void pendingMessagesAreOrderedBySoonestDeadlineThenNoDeadline() {
+		Employee manager = newEmployee("Alice", engineering, Role.MANAGER);
+		Employee carol = newEmployee("Carol", engineering, Role.EMPLOYEE);
+		Instant now = Instant.now();
+		ImportantMessage none = newMessage("None " + tag, manager, Set.of(engineering));
+		ImportantMessage later = newMessageDue("Later " + tag, manager, Set.of(engineering), now.plus(Duration.ofDays(5)));
+		ImportantMessage sooner = newMessageDue("Sooner " + tag, manager, Set.of(engineering), now.plus(Duration.ofDays(1)));
+
+		assertThat(messageService.findPendingForEmployee(carol.getId()))
+				.extracting(ImportantMessage::getId)
+				.containsExactly(sooner.getId(), later.getId(), none.getId());
+	}
+
+	@Test
+	void overdueAndDueSoonQueries() {
+		Employee manager = newEmployee("Alice", engineering, Role.MANAGER);
+		Employee carol = newEmployee("Carol", engineering, Role.EMPLOYEE);
+		Instant now = Instant.now();
+		ImportantMessage overdue = newMessageDue("Overdue " + tag, manager, Set.of(engineering), now.plus(Duration.ofDays(1)));
+		ImportantMessage overdueButSigned = newMessageDue("Signed " + tag, manager, Set.of(engineering), now.plus(Duration.ofDays(1)));
+		ImportantMessage dueTomorrow = newMessageDue("Tomorrow " + tag, manager, Set.of(engineering), now.plus(Duration.ofDays(1)));
+		ImportantMessage dueNextMonth = newMessageDue("Next month " + tag, manager, Set.of(engineering), now.plus(Duration.ofDays(30)));
+		messageService.acknowledge(overdueButSigned.getId(), carol.getId());
+		for (ImportantMessage m : List.of(overdue, overdueButSigned)) {
+			ImportantMessage stored = messageRepository.findById(m.getId()).orElseThrow();
+			stored.setDeadline(now.minus(Duration.ofHours(3)));
+			messageRepository.save(stored);
+		}
+
+		assertThat(messageService.findOverdue()).extracting(ImportantMessage::getId)
+				.contains(overdue.getId())
+				.doesNotContain(overdueButSigned.getId(), dueTomorrow.getId(), dueNextMonth.getId());
+		assertThat(messageService.findDueWithin(7)).extracting(ImportantMessage::getId)
+				.contains(dueTomorrow.getId())
+				.doesNotContain(overdue.getId(), dueNextMonth.getId());
+		assertThatThrownBy(() -> messageService.findDueWithin(0)).isInstanceOf(BusinessRuleException.class);
 	}
 
 	@Test

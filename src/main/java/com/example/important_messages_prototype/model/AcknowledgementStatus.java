@@ -1,5 +1,6 @@
 package com.example.important_messages_prototype.model;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
@@ -8,6 +9,8 @@ import java.util.List;
 public record AcknowledgementStatus(
 		String messageId,
 		String title,
+		Instant deadline,
+		DeadlineCountdown countdown,
 		int totalRecipients,
 		int acknowledgedCount,
 		int notAcknowledgedCount,
@@ -21,6 +24,8 @@ public record AcknowledgementStatus(
 		return new AcknowledgementStatus(
 				message.getId(),
 				message.getTitle(),
+				message.getDeadline(),
+				message.getCountdown(),
 				acknowledged.size() + notAcknowledged.size(),
 				acknowledged.size(),
 				notAcknowledged.size(),

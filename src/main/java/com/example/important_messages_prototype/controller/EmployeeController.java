@@ -41,7 +41,7 @@ public class EmployeeController {
 		return messageService.findForEmployee(id);
 	}
 
-	/** The important messages this employee still needs to sign/acknowledge. */
+	/** The important messages this employee still needs to sign/acknowledge, soonest deadline first. */
 	@GetMapping("/{id}/messages/pending")
 	public List<ImportantMessage> pendingMessagesFor(@PathVariable String id) {
 		return messageService.findPendingForEmployee(id);

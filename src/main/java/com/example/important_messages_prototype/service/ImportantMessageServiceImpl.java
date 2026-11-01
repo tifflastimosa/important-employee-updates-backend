@@ -1,11 +1,16 @@
 package com.example.important_messages_prototype.service;
 
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 
 import org.bson.types.ObjectId;
 import org.springframework.stereotype.Service;
 
 import com.example.important_messages_prototype.model.AcknowledgementStatus;
+import com.example.important_messages_prototype.model.DeadlineCountdown;
 import com.example.important_messages_prototype.model.Employee;
 import com.example.important_messages_prototype.model.ImportantMessage;
 import com.example.important_messages_prototype.model.Priority;
@@ -24,6 +29,17 @@ public class ImportantMessageServiceImpl implements ImportantMessageService {
 		this.messageRepository = messageRepository;
 		this.employeeService = employeeService;
 		this.employeeRepository = employeeRepository;
+	}
+
+	/** Soonest deadline first; messages without a deadline last; ties broken by newest first. */
+	private static final Comparator<ImportantMessage> BY_DEADLINE = Comparator
+			.comparing(ImportantMessage::getDeadline, Comparator.nullsLast(Comparator.naturalOrder()))
+			.thenComparing(ImportantMessage::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder()));
+
+	private static void requireFutureDeadline(Instant deadline) {
+		if (deadline != null && !deadline.isAfter(Instant.now())) {
+			throw new BusinessRuleException("Deadline must be in the future");
+		}
 	}
 
 	/** Everyone the message is addressed to, except its author. */
@@ -58,12 +74,37 @@ public class ImportantMessageServiceImpl implements ImportantMessageService {
 	@Override
 	public List<ImportantMessage> findPendingForEmployee(String employeeId) {
 		Employee employee = employeeService.findById(employeeId);
-		return messageRepository.findNotAcknowledgedBy(new ObjectId(employee.getId()));
+		return messageRepository.findNotAcknowledgedBy(new ObjectId(employee.getId())).stream()
+				.sorted(BY_DEADLINE)
+				.toList();
 	}
 
 	@Override
 	public AcknowledgementStatus getAcknowledgementStatus(String messageId) {
 		return AcknowledgementStatus.of(findById(messageId));
+	}
+
+	@Override
+	public DeadlineCountdown getCountdown(String messageId) {
+		ImportantMessage message = findById(messageId);
+		if (!message.hasDeadline()) {
+			throw new ResourceNotFoundException("Deadline for important message", messageId);
+		}
+		return message.getCountdown();
+	}
+
+	@Override
+	public List<ImportantMessage> findOverdue() {
+		return messageRepository.findOverdue(Instant.now());
+	}
+
+	@Override
+	public List<ImportantMessage> findDueWithin(int days) {
+		if (days < 1) {
+			throw new BusinessRuleException("days must be at least 1");
+		}
+		Instant now = Instant.now();
+		return messageRepository.findByDeadlineBetweenOrderByDeadlineAsc(now, now.plus(Duration.ofDays(days)));
 	}
 
 	@Override
@@ -75,6 +116,7 @@ public class ImportantMessageServiceImpl implements ImportantMessageService {
 		if (!author.canPublishMessages()) {
 			throw new BusinessRuleException(author.getFullName() + " (" + author.getRole() + ") cannot publish messages");
 		}
+		requireFutureDeadline(message.getDeadline());
 		message.setId(null);
 		message.setAuthor(author);
 		message.setAcknowledgedBy(null);
@@ -85,6 +127,9 @@ public class ImportantMessageServiceImpl implements ImportantMessageService {
 	@Override
 	public ImportantMessage update(String id, ImportantMessage changes) {
 		ImportantMessage existing = findById(id);
+		if (!Objects.equals(existing.getDeadline(), changes.getDeadline())) {
+			requireFutureDeadline(changes.getDeadline());
+		}
 		existing.updateFrom(changes);
 		existing.assignRecipients(recipientsOf(existing));
 		return messageRepository.save(existing);

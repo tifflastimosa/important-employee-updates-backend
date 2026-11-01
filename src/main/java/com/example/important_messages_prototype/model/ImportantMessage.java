@@ -1,5 +1,6 @@
 package com.example.important_messages_prototype.model;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
@@ -39,6 +40,13 @@ public class ImportantMessage extends BaseDocument {
 
 	private Set<String> targetDepartments = new HashSet<>();
 
+	/**
+	 * When recipients must sign/acknowledge by. Optional. An exact moment in time (stored in
+	 * UTC), sent and returned in ISO-8601 format, e.g. "2026-11-06T17:00:00-08:00" or
+	 * "2026-11-07T01:00:00Z".
+	 */
+	private Instant deadline;
+
 	/** Recipients who have signed/acknowledged the message. Stored as references to employee documents. */
 	@DocumentReference
 	private Set<Employee> acknowledgedBy = new HashSet<>();
@@ -51,11 +59,17 @@ public class ImportantMessage extends BaseDocument {
 	}
 
 	public ImportantMessage(String title, String content, Priority priority, Employee author, Set<String> targetDepartments) {
+		this(title, content, priority, author, targetDepartments, null);
+	}
+
+	public ImportantMessage(String title, String content, Priority priority, Employee author,
+			Set<String> targetDepartments, Instant deadline) {
 		this.title = title;
 		this.content = content;
 		setPriority(priority);
 		this.author = author;
 		setTargetDepartments(targetDepartments);
+		this.deadline = deadline;
 	}
 
 	public boolean isCompanyWide() {
@@ -104,12 +118,35 @@ public class ImportantMessage extends BaseDocument {
 		return notAcknowledgedBy.isEmpty();
 	}
 
+	public boolean hasDeadline() {
+		return deadline != null;
+	}
+
+	/** True if the deadline has passed at the given time. Messages without a deadline are never overdue. */
+	public boolean isOverdueAt(Instant now) {
+		return deadline != null && now.isAfter(deadline);
+	}
+
+	/** Countdown to the deadline as of the given time, or null if there is no deadline. */
+	public DeadlineCountdown countdownAt(Instant now) {
+		return deadline == null ? null : DeadlineCountdown.between(now, deadline);
+	}
+
+	/**
+	 * Countdown as of right now. Included in JSON responses as "countdown"; not stored in
+	 * MongoDB (only fields are stored).
+	 */
+	public DeadlineCountdown getCountdown() {
+		return countdownAt(Instant.now());
+	}
+
 	/** Copies the editable fields from another message. Author and acknowledgements are kept. */
 	public void updateFrom(ImportantMessage other) {
 		this.title = other.title;
 		this.content = other.content;
 		setPriority(other.priority);
 		setTargetDepartments(other.targetDepartments);
+		this.deadline = other.deadline;
 	}
 
 	public String getTitle() { return title; }
@@ -128,6 +165,9 @@ public class ImportantMessage extends BaseDocument {
 	public void setTargetDepartments(Set<String> targetDepartments) {
 		this.targetDepartments = targetDepartments == null ? new HashSet<>() : new HashSet<>(targetDepartments);
 	}
+
+	public Instant getDeadline() { return deadline; }
+	public void setDeadline(Instant deadline) { this.deadline = deadline; }
 
 	public Set<Employee> getAcknowledgedBy() { return acknowledgedBy; }
 	public void setAcknowledgedBy(Set<Employee> acknowledgedBy) {
