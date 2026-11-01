@@ -1,0 +1,6 @@
+spring.application.name=important-messages-prototype
+
+# Copy this file to application.properties (which is git-ignored) and fill in your credentials.
+# Get the connection string from MongoDB Atlas: Database -> Connect -> Drivers.
+spring.mongodb.uri=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/
+spring.mongodb.database=important_messages
