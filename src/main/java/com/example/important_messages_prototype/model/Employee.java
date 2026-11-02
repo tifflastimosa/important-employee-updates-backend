@@ -27,8 +27,7 @@ public class Employee extends BaseDocument {
 	@NotBlank
 	private String department;
 
-	/** The store the employee works at. Kept as text so values like "0042" keep their leading zeros. */
-	@NotBlank
+	/** The store the employee works at, if any. Kept as text so values like "0042" keep their leading zeros. */
 	private String storeNumber;
 
 	private String jobTitle;
